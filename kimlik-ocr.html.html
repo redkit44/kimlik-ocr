@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kimlik OCR (Görüntüsüz)</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.1/dist/tesseract.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    video, canvas { display: none; }
+    #output { white-space: pre-line; margin-top: 20px; }
+    button { margin-top: 20px; padding: 10px; margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <h2>T.C. Kimlik OCR (Fotoğraf Kaydı Olmadan)</h2>
+  <p>Kimliği kameraya birkaç saniye gösterin. Fotoğraf alınmaz, sadece geçici bellek kullanılır.</p>
+  <video id="video" autoplay playsinline width="320" height="240"></video>
+  <canvas id="canvas" width="320" height="240"></canvas>
+
+  <button id="capture">Kimliği Tara</button>
+  <div id="output"></div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const output = document.getElementById('output');
+    const captureButton = document.getElementById('capture');
+
+    let stream;
+    navigator.mediaDevices.getUserMedia({ video: true }).then(s => {
+      stream = s;
+      video.srcObject = stream;
+    });
+
+    captureButton.addEventListener('click', () => {
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(blob => {
+        Tesseract.recognize(blob, 'tur', { logger: m => console.log(m) })
+          .then(({ data: { text } }) => {
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            let ad = '', soyad = '', tckn = '', dogum = '', cinsiyet = '', uyruk = '';
+
+            lines.forEach(line => {
+              if (line.includes('ADI') || line.includes('Ad')) ad = line.split(':').pop().trim();
+              else if (line.includes('SOYADI') || line.includes('Soyad')) soyad = line.split(':').pop().trim();
+              else if (/\d{11}/.test(line)) tckn = line.match(/\d{11}/)[0];
+              else if (/\d{2}\.\d{2}\.\d{4}/.test(line)) dogum = line.match(/\d{2}\.\d{2}\.\d{4}/)[0];
+              else if (line.includes('E') || line.includes('K')) cinsiyet = line.includes('E') ? 'Erkek' : 'Kadın';
+              else if (line.includes('T.C.') || line.includes('TUR')) uyruk = 'T.C.';
+            });
+
+            const result = `Ad: ${ad}\nSoyad: ${soyad}\nTCKN: ${tckn}\nDoğum Tarihi: ${dogum}\nCinsiyet: ${cinsiyet}\nUyruk: ${uyruk}`;
+            output.textContent = result;
+          })
+          .catch(err => {
+            output.textContent = 'Okuma hatası: ' + err;
+          });
+      }, 'image/jpeg');
+    });
+  </script>
+</body>
+</html>
